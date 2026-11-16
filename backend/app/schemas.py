@@ -26,6 +26,28 @@ class EntryPayload(BaseModel):
 
     values: dict[str, Any] = Field(default_factory=dict)
     remark: str | None = None
+    # 前端动作按钮按 { action: "..." } 直接提交，这里同时接受顶层写法。
+    action: str | None = None
+
+
+class RecoveryDecisionPayload(BaseModel):
+    """恢复判定请求：取数时读取的反压指标水位、消费延迟与采样时间。
+
+    指标可以用 `指标记录ID` 或 `指标编号` 定位；`样本编号` 用于空采样去重，
+    `version` 用于沿用存量版本、收敛竞态请求。
+    """
+
+    values: dict[str, Any] = Field(default_factory=dict)
+    remark: str | None = None
+
+
+class RecoveryDecisionResult(BaseModel):
+    ok: bool
+    message: str
+    created: bool = False
+    duplicate: bool = False
+    entry: dict[str, Any] | None = None
+    notification: dict[str, Any] | None = None
 
 
 

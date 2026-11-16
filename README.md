@@ -55,6 +55,7 @@ npm run dev
 | 状态后端管理 | `state` | 后端配置 | 配置编号、后端类型、存储路径 |
 | 检查点恢复 | `checkpoint` | 检查点记录 | 记录编号、流作业名、检查点ID |
 | 反压监控面板 | `backpress` | 反压指标 | 指标编号、流作业名、反压级别 |
+| 反压恢复判定 | `backpress/recovery` | 恢复判定记录 | 判定编号、上一级别、空采样原因、通知抑制结果 |
 | 延迟追踪管理 | `latency` | 延迟记录 | 记录编号、流作业名、端到端延迟 |
 | 流作业运维 | `jobops` | 作业实例 | 实例编号、作业名称、运行节点 |
 | 流数据输出端 | `sink` | 输出配置 | 配置编号、输出类型、目标地址 |
@@ -72,6 +73,34 @@ npm run dev
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+
+## 反压恢复判定
+
+后端接口在 `backend/app/routers/backpress.py`，规则在 `backend/app/services/backpress.py`
+与 `backend/app/services/backpress_notify.py`，页面为 `/backpress/recovery`。
+
+- `POST /api/backpress/recoveries`：读取反压指标的水位、消费延迟与采样时间，
+  校验后写入恢复判定数据记录。同一“指标编号 + 采样时间 + 样本编号”只保留一个终态，
+  并发的重复请求返回同一份记录。
+- `GET /api/backpress/recoveries`：按判定编号、指标编号、空采样、通知抑制结果、
+  采样时间区间、版本等条件筛选、检索、分页与定位，排序固定按记录 ID 升序。
+- `POST /api/backpress/recoveries/repair`：按现有取数逻辑补正错位记录，
+  沿用存量版本，不改判定结果。
+- `GET/POST /api/backpress/notifications`：另一个业务入口按判定编号或幂等键接收
+  同一份判定记录，消费侧维护自己的处理记录并只落一个终态。
+
+恢复条件（三项同时满足才算恢复）：
+
+1. 缓冲区水位不高于 `30%`；
+2. 消费延迟不高于 `3s`；
+3. 消费延迟低于上一次采样。
+
+空采样或缺少水位/延迟时维持上一级别、累计连续空采样次数并抑制通知，
+不能把“暂无结果”当成“已经恢复”。采样中断后判定记录给出恢复起点算子与已跳过算子，
+只从未完成算子继续，已完成的算子不重跑。
+
+测试：`cd backend && .venv/bin/python -m unittest discover -s tests -t . -v`
+
 
 领域：数据工程
 子方向：数仓与数据湖

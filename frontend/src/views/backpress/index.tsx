@@ -45,14 +45,21 @@ export default function BackpressView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
+  const [notice, setNotice] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
-  const filterFields = useMemo(() => columns.slice(0, 3), [])
+  const filterFields = useMemo(() => ['指标编号/作业名', '反压级别'], [])
+  const levelCodes: Record<string, string> = { 正常: 'normal', 轻微反压: 'mild', 严重反压: 'severe', 已恢复: 'recovered' }
 
   const reload = useCallback(async () => {
     setErrorMessage('')
-    const query = new URLSearchParams(filters).toString()
+    // 后端只认 keyword/status/level，把界面上的条件映射成对应参数。
+    const query = new URLSearchParams()
+    const keyword = filters['指标编号/作业名']
+    if (keyword) query.set('keyword', keyword)
+    const level = filters['反压级别']
+    if (level) query.set('level', levelCodes[level] ?? level)
     try {
-      const response = await request(`${ENDPOINT}?${query}`)
+      const response = await request(`${ENDPOINT}?${query.toString()}`)
       if (!response.ok) {
         throw new Error('反压指标列表读取失败')
       }
@@ -70,6 +77,7 @@ export default function BackpressView() {
 
   async function runAction(action: string, row: Row) {
     setErrorMessage('')
+    setNotice('')
     try {
       const response = await request(`${ENDPOINT}/${row.id}/actions`, {
         method: 'POST',
@@ -77,6 +85,12 @@ export default function BackpressView() {
       })
       if (!response.ok) {
         throw new Error('反压监控面板动作未生效，请稍后重试')
+      }
+      const payload = await response.json()
+      if (payload.ok === false) {
+        setErrorMessage(String(payload.message ?? '动作被业务规则拦下'))
+      } else {
+        setNotice(String(payload.message ?? '动作已生效'))
       }
       await reload()
     } catch (error) {
@@ -155,6 +169,7 @@ export default function BackpressView() {
 
       <footer className="page-foot">
         <span>共 {total} 条反压监控面板记录</span>
+        {notice && <span>{notice}</span>}
         {errorMessage && <span className="error-text">{errorMessage}</span>}
       </footer>
     </section>
